@@ -21,17 +21,18 @@ CI and `[compat]` target Julia 1.13 only (see Compatibility in `../AGENTS.md`); 
 |---|---|
 | `src/SimSMLM.jl` | Module: `using` lines, all exports, `include` order |
 | `src/timevarying.jl` | `at(p, t)` — any parameter may be a constant or a function of time |
-| `src/types.jl` | `Localization`, `LocalizationTable`, `Truth`, `columnview`, accessors |
-| `src/deformation.jl` | `place(d, u, t)`: `Static`, `Similarity`, `Drift`, `Composed` (`∘`), `rotation` |
+| `src/types.jl` | `Localization`, `LocalizationTable`, `Truth` (incl. `component`), `columnview`, accessors, `smaptable` (export with SMAPpy column names) |
+| `src/deformation.jl` | `place(d, u, t)`: `Static`, `Similarity`, `Drift`, `Bend` (constant-area cap), `Composed` (`∘`), `rotation` |
 | `src/shapes.jl` | `sample_site(rng, shape)`: `SphereSurface`, `Ball`, `Ring`, `LineSegment`, `PointCloud` |
 | `src/events.jl` | `eventtimes(rng, rate, t_end)` and `eventtimes(rng, rate, n)` |
 | `src/background.jl` | `FieldOfView`, `Background` (spurious localizations with their own photon budget) |
 | `src/optics.jl` | Uncertainty models (`ShotNoise`, `StallingaRieger`, `GaussianMask`), `Optics`, `photondist` |
-| `src/simulate.jl` | `Structure` and the `simulate` pipeline |
+| `src/simulate.jl` | `AbstractStructure`, `Structure`, `Composite`, and the `simulate` pipeline |
 | `test/runtests.jl` | Single file, one `@testset` per concern |
-| `derivations/derivation.qmd` | The owner's derivations of the photon and precision models (gitignored).  All math should be checked there first. If new math is added, notes must be created there.  |
+| `derivations/derivation.qmd` | The owner's derivations (gitignored): photon and precision models, the constant-area cap map, Poisson splitting. **Maths only** — no code, no references to the implementation. All math should be checked there first. If new math is added, notes must be created there. |
+| `README.md` | Quick start only: what SimSMLM is, the main example, short cap/composite and point-cloud examples, the building blocks. Keep it short; details go in `NOTE.md`. |
+| `NOTE.md` | Everything behind the README: the model and its assumptions, background, photon count, caps, composites, storage, and implementation notes (how the derivations map onto the code, numerical guards, design decisions and their measured cost). Discuss implementation here or in source comments, never in `derivations/`. |
 | `papers/` | Reference PDFs (gitignored) |
-| `simulation.jl` (root) | The owner's **old** code, kept for reference only. Not part of the package; do not include, test, or "fix" it. |
 
 ## The model (what `simulate` does)
 
@@ -40,17 +41,19 @@ Four batched stages, in this order — keep it that way:
 1. **Times** — all event times from a Poisson process at `emis_rate` (+ `background.rate` if present). The clock starts at the first event, so `times[1] == 0.0`.
 2. **Types** — one batched Bernoulli draw labels each event signal or background, with `P(signal) = λs / (λs + λb)` (Poisson superposition).
 3. **Photons** — each event's count from its type's distribution: `photondist(optics)` or `photondist(background)`, both `Geometric(1/(1+mean))`.
-4. **Filter & localize** — events with **zero** photons are dropped (not a tunable threshold — there is no `min_photons`). Survivors get a fresh position sampled from the structure *at that instant* (`sample_site` → `place`), an uncertainty `σ = uncertainty(model, N)`, and Gaussian noise.
+4. **Filter & localize** — events with **zero** photons are dropped (not a tunable threshold — there is no `min_photons`). Survivors get a fresh position sampled from the structure *at that instant* (`sample_site` → `place`; a `Composite` first draws the component), an uncertainty `σ = uncertainty(model, N)`, and Gaussian noise.
 
 Consequences worth knowing before touching the maths:
 
 - `emis_rate` counts *emission events*; a fraction `1/(1+hτ)` leave no localization. `nevents` counts events, not rows.
 - Surviving photon counts are geometric conditioned on `N ≥ 1`, so `mean(locs.nphotons) ≈ 1 + meanphotons(o)`, not `meanphotons(o)`.
 - `σ = s/√N` is heavy-tailed (Fréchet, shape 2, infinite variance). Assert on **medians**, not means.
-- Every event is an independent draw: there is no emitter identity and no repeated blinking. Rates are constant (no time-varying `emis_rate`).
+- Every event is an independent draw. On a continuous shape there is no emitter identity and no repeated blinking; a `PointCloud` of fixed labels gives repeated localizations of each label (drawn with replacement), but no blinking kinetics. Rates are constant (no time-varying `emis_rate`).
 - `Background` shares the PSF/uncertainty model, so a dimmer background is automatically worse-localized.
+- `Bend` expects material points on the unit sphere and is equal-area, so uniform stays uniform at every `κ`; `|κ| ≤ 1` is a hard limit (`|κ| = 1` is the full sphere).
+- `Composite` weights are fractions of *events* (Poisson thinning), not label densities, and are constant in time.
 
-The physical derivations live in `derivations/derivation.qmd`; if you change the photon or precision model, check it against that file.
+The physical derivations live in `derivations/derivation.qmd`; if you change the photon or precision model, check it against that file. How the maths is implemented is in `NOTE.md`.
 
 ## Data layout (important)
 
@@ -73,7 +76,7 @@ The physical derivations live in `derivations/derivation.qmd`; if you change the
 - Use `StableRNG(seed)` (via the `rng()` helper), never a seeded default RNG — Julia's default stream is not stable across versions.
 - Tests are **statistical**: assert against the closed-form expectation with a tolerance a few standard errors wide (`rtol`/`atol`). Derive the expected value; don't tune thresholds to whatever the current output happens to be.
 - A failing statistical test may be a wrong expectation rather than a bug — work out the theory before changing either.
-- For every public behaviour change, update the tests **and** the README, and grep for stale references (renamed keywords, removed types) across `src/`, `test/` and `README.md`.
+- For every public behaviour change, update the tests **and** `NOTE.md` (and the README if the quick-start usage changes), and grep for stale references (renamed keywords, removed types) across `src/`, `test/`, `README.md` and `NOTE.md`.
 
 ## Working with the owner
 
@@ -81,3 +84,4 @@ The general rules are in `../AGENTS.md`. Specific to this package:
 
 - Recent history is a steady *removal* of features (frame grids, labelling, blinking kinetics, time-varying rates, `min_photons`) — don't reintroduce them.
 - Docstrings can lag behind the code after the owner's edits; when they disagree, the code is usually the intent — ask if unsure, and fix the docstring.
+- Not wanted, by the owner's decision: Poisson photon counts (keep the geometric model), precision independent of the photon count, and deliberately mis-reported precision. Old fitter-side simulators did these as quick hacks; don't port them.
