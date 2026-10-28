@@ -11,13 +11,9 @@ Every emission event is independent, and yields at most one localization:
 3. **How bright** — the photon count is geometric, from whichever distribution the event's type calls for (see below). `photondist`.
 4. **How well localized** — an `AbstractUncertainty` model turns the photon count into a per-axis standard deviation, and the reported position is the truth plus that noise.
 
-The four stages are batched in that order: all event times, then all event types,
-then all photon counts, then the events that emitted nothing are dropped and the
-survivors localized.
+The four stages are batched in that order: all event times, then all event types, then all photon counts, then the events that emitted nothing are dropped and the survivors localized.
 
-`nevents` fixes the event count instead of the duration — useful when comparing
-fits at a matched number of events. It counts *events*, so expect a fraction
-`1/(1+hτ)` fewer rows.
+`nevents` fixes the event count instead of the duration — useful when comparing fits at a matched number of events. It counts *events*, so expect a fraction `1/(1+hτ)` fewer rows.
 
 ### Time
 
@@ -25,19 +21,11 @@ Localizations carry the **exact event time**, not a frame index. Since each even
 
 ### Background
 
-Passing a `Background` adds spurious localizations — the false positives a real
-pipeline produces from noise, autofluorescence and out-of-focus emitters — drawn
-uniformly in a `FieldOfView` and flagged in `truth.issignal`.
+Passing a `Background` adds spurious localizations — the false positives a real pipeline produces from noise, autofluorescence and out-of-focus emitters — drawn uniformly in a `FieldOfView` and flagged in `truth.issignal`.
 
-Because independent Poisson processes superpose, one stream is drawn at
-`λ_signal + rate` and each event is labelled signal with probability
-`λ_signal / (λ_signal + rate)`. That is exact and costs one exponential draw per
-event instead of two processes and a merge.
+Because independent Poisson processes superpose, one stream is drawn at `λ_signal + rate` and each event is labelled signal with probability `λ_signal / (λ_signal + rate)`. That is exact and costs one exponential draw per event instead of two processes and a merge.
 
-Background carries its own `meanphotons`, separate from the signal's. Since both
-share the PSF and uncertainty model, a dimmer background is also a *less
-precisely localized* one — which is what real false positives look like. Pass
-`meanphotons(optics)` to make them indistinguishable in brightness.
+Background carries its own `meanphotons`, separate from the signal's. Since both share the PSF and uncertainty model, a dimmer background is also a *less precisely localized* one — which is what real false positives look like. Pass `meanphotons(optics)` to make them indistinguishable in brightness.
 
 ### Photon count
 
@@ -49,10 +37,7 @@ N | T ~ Poisson(hT),  T ~ Exponential(τ)   ⟹   N ~ Geometric(1/(1+hτ)),  E[N
 
 So the ON duration never has to be sampled — one draw per event, not two. The race interpretation makes it obvious: emission and switch-off compete at rates `h` and `1/τ`, and `N` counts the emissions that win before the switch-off. See `derivations/derivation.qmd`.
 
-That marginal puts mass `p = 1/(1+hτ)` on `N = 0`. An event that emits no
-detected photons leaves nothing to fit, so it is dropped — not as a tunable
-threshold, but because there is no localization to report. `rate` therefore
-counts **emission events**, and a fraction `p` of them leave no trace.
+That marginal puts mass `p = 1/(1+hτ)` on `N = 0`. An event that emits no detected photons leaves nothing to fit, so it is dropped — not as a tunable threshold, but because there is no localization to report. `rate` therefore counts **emission events**, and a fraction `p` of them leave no trace.
 
 The rows that survive follow the law conditioned on `N ≥ 1`:
 
@@ -60,13 +45,9 @@ The rows that survive follow the law conditioned on `N ≥ 1`:
 P(N = n | N ≥ 1) = (1-p)^(n-1) p,   n = 1, 2, ...     mean 1 + hτ
 ```
 
-So `mean(locs.nphotons)` sits one above `meanphotons(o)`, and `length(locs)` sits
-a fraction `p` below the number of events.
+So `mean(locs.nphotons)` sits one above `meanphotons(o)`, and `length(locs)` sits a fraction `p` below the number of events.
 
-One consequence worth remembering: the induced spread of `σ = s/√N` is
-heavy-tailed (Fréchet with shape 2, whose variance diverges), because a rare
-one- or two-photon event gives an enormous uncertainty. Summarise simulated
-uncertainties with **medians**, not means.
+One consequence worth remembering: the induced spread of `σ = s/√N` is heavy-tailed (Fréchet with shape 2, whose variance diverges), because a rare one- or two-photon event gives an enormous uncertainty. Summarise simulated uncertainties with **medians**, not means.
 
 ### Relation to a population of blinking emitters
 
@@ -82,7 +63,7 @@ Because each emitter fires exactly once in that picture, **drawing a fresh posit
 
 ## Spherical caps: `Bend`
 
-A cap is the unit sphere bent by `Bend(κ)`, the constant-area map (`@eq-bend` in the derivations), implemented as an `AbstractDeformation{3}` acting on material points from `SphereSurface{3}()` — the unit sphere centred at the origin, so `h = 1 - u_z`. `κ` is dimensionless, `-1 ≤ κ ≤ 1`, and may be a constant or `t -> κ`: `0` is a flat disk of radius 2, `±1` the whole sphere. The apex sits at the origin with outward normal `+z`, and an outer `Similarity` sets the size, orientation and position: with scale `s` and rotation `R`, the cap has area `4π s²`, physical curvature `κ / s`, and outward normal `R * ẑ` at the apex. `rotation(n)` gives the `R` that points that normal along `n`.
+A cap is the unit sphere bent by `Bend(kappa)` (κ below; the field `kappa`), the constant-area map (`@eq-bend` in the derivations), implemented as an `AbstractDeformation{3}` acting on material points from `SphereSurface{3}()` — the unit sphere centred at the origin, so `h = 1 - u_z`. `κ` is dimensionless, `-1 ≤ κ ≤ 1`, and may be a constant or `t -> κ`: `0` is a flat disk of radius 2, `±1` the whole sphere. The apex sits at the origin with outward normal `+z`, and an outer `Similarity` sets the size, orientation and position: with scale `s` and rotation `R`, the cap has area `4π s²`, physical curvature `κ / s`, and outward normal `R * ẑ` at the apex. `rotation(n)` gives the `R` that points that normal along `n`.
 
 ```julia
 # area 4π·60² nm², flat at t = 0 and about a hemisphere (κ = 1/√2) at t = 10,
@@ -94,8 +75,7 @@ cap = Structure(
 )
 ```
 
-Every material point keeps the area above it, so labels stay uniform on the cap
-at every curvature. Varying `s` and `κ` in time covers both growth models:
+Every material point keeps the area above it, so labels stay uniform on the cap at every curvature. Varying `s` and `κ` in time covers both growth models:
 
 - **constant area** (a flat lattice that curves): fixed `scale`, varying `κ`;
 - **constant curvature** (a cap that grows): `scale = t -> s(t)` with `Bend(t -> c * s(t))` for a physical curvature `c`.
@@ -118,10 +98,7 @@ Implementation notes:
 
 ## Composite structures: `Composite`
 
-`Composite(structure => weight, ...)` images several structures together. Each
-keeps its own shape and deformation, so parts can move independently, and
-receives a share of the signal events. Motion shared by every component, such as
-drift, is composed into each with `∘`.
+`Composite(structure => weight, ...)` images several structures together. Each keeps its own shape and deformation, so parts can move independently, and receives a share of the signal events. Motion shared by every component, such as drift, is composed into each with `∘`.
 
 ```julia
 # a ring, and a cap 50 nm above it that bends while the ring stays flat
@@ -146,10 +123,7 @@ It implements the splitting of `@eq-thinning`: for each signal event, one unifor
 
 ## Storage
 
-A `LocalizationTable` is a `StructArray` of `Localization`s, but each column is
-backed by one contiguous `D × N` matrix, viewed through `columnview` as `N`
-static vectors. The table therefore has both faces at no cost, because they are
-literally the same bytes:
+A `LocalizationTable` is a `StructArray` of `Localization`s, but each column is backed by one contiguous `D × N` matrix, viewed through `columnview` as `N` static vectors. The table therefore has both faces at no cost, because they are literally the same bytes:
 
 ```julia
 locs[i].position       # SVector — stack-allocated, nothing on the heap
@@ -157,13 +131,9 @@ locs.position[i]       # the same SVector
 positions(locs)        # the D×N matrix itself; parent(locs.position)
 ```
 
-Iterating rows, iterating the point column, and scanning the raw matrix all
-allocate zero bytes. Writing through `positions(locs)` is visible in `locs[i]`,
-since there is only one copy of the data.
+Iterating rows, iterating the point column, and scanning the raw matrix all allocate zero bytes. Writing through `positions(locs)` is visible in `locs[i]`, since there is only one copy of the data.
 
-`Truth` is stored the same way, so `place(truth.motion, truth.u[i], locs.t[i])`
-takes static vectors directly. For a `Composite`, `truth.motion` holds one
-deformation per component: use `truth.motion[truth.component[i]]`.
+`Truth` is stored the same way, so `place(truth.motion, truth.u[i], locs.t[i])` takes static vectors directly. For a `Composite`, `truth.motion` holds one deformation per component: use `truth.motion[truth.component[i]]`.
 
 ## Export
 

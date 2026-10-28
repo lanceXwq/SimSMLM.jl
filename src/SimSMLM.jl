@@ -1,19 +1,11 @@
 """
     SimSMLM
 
-Simulation of single-molecule localization microscopy datasets from **moving**
-structures.
+Simulation of single-molecule localization microscopy datasets from **moving** structures.
 
-Every emission event is independent. An event happens at a time drawn from a
-Poisson process; its position is sampled from the structure *as it stands at that
-instant*; its photon count follows the geometric distribution that an exponential
-ON period and a Poisson emission rate imply. One event yields at most one
-localization.
+Every emission event is independent. An event happens at a time drawn from a Poisson process; its position is sampled from the structure *as it stands at that instant*; its photon count follows the geometric distribution that an exponential ON period and a Poisson emission rate imply. One event yields at most one localization.
 
-The deformation is the piece that makes this a simulation of a moving structure
-rather than a static one: sampling a position at time `t` means sampling from the
-reference shape and pushing that material coordinate forward with
-[`place`](@ref).
+The deformation is the piece that makes this a simulation of a moving structure rather than a static one: sampling a position at time `t` means sampling from the reference shape and pushing that material coordinate forward with [`place`](@ref).
 
 See [`simulate`](@ref) for the entry point.
 """

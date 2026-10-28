@@ -43,13 +43,11 @@ smaptable(locs)        # flat columns with SMAPpy's names, e.g. for CSV.write
 smaptable(truth)       # the ground truth as its own table, row-aligned
 ```
 
-Pass `nevents = 20_000` in place of `t_end` to fix the event count and let the
-duration float.
+Pass `nevents = 20_000` in place of `t_end` to fix the event count and let the duration float.
 
 ## Caps and composite structures
 
-A spherical cap is the unit sphere bent by `Bend(κ)`, and `Composite` images
-several structures together, each with its own motion and share of the events:
+A spherical cap is the unit sphere bent by `Bend(kappa)`, and `Composite` images several structures together, each with its own motion and share of the events:
 
 ```julia
 # a ring, and a cap 50 nm above it that curves from flat while the ring stays put
@@ -66,11 +64,7 @@ truth.component        # which part each localization came from (0 for spurious)
 
 ## Point clouds
 
-`PointCloud` turns a set of discrete labels into a shape. Each event draws one
-label, with replacement, so every label is localized repeatedly — the clustering
-of real blinking dyes, which a continuous shape never shows. The labels can be
-your own points (a fitter's model points, say) or drawn once from a continuous
-shape, and the deformation moves them like any other shape:
+`PointCloud` turns a set of discrete labels into a shape. Each event draws one label, with replacement, so every label is localized repeatedly — the clustering of real blinking dyes, which a continuous shape never shows. The labels can be your own points (a fitter's model points, say) or drawn once from a continuous shape, and the deformation moves them like any other shape:
 
 ```julia
 # eight labels on a 50 nm ring, NPC-like
@@ -87,14 +81,12 @@ locs, truth = simulate(cap; emis_rate = 2000.0, t_end = 5.0,
 truth.u                # the label behind each localization
 ```
 
-For partial labeling, keep a random subset of the points:
-`PointCloud(pts[:, rand(size(pts, 2)) .< 0.6])`. Point clouds and continuous
-shapes mix freely in a `Composite`.
+For partial labeling, keep a random subset of the points: `PointCloud(pts[:, rand(size(pts, 2)) .< 0.6])`. Point clouds and continuous shapes mix freely in a `Composite`.
 
 ## Building blocks
 
 - **Shapes**: `SphereSurface`, `Ball`, `Ring`, `LineSegment`, `PointCloud` (wrap your own `D×N` matrix). Orientation is the deformation's job, so shapes sit in the xy-plane and `Similarity`'s `rot` turns them.
-- **Deformations**: `Static`, `Similarity` (scale/rotate/translate, each constant or `t -> ...`), `Drift`, `Bend` (unit sphere → constant-area spherical cap of curvature `κ`), `Composed` (via `∘`), plus `rotation` helpers — `rotation(n)` points a structure's `+z` along a normal `n`
+- **Deformations**: `Static`, `Similarity` (scale/rotate/translate, each constant or `t -> ...`), `Drift`, `Bend` (unit sphere → constant-area spherical cap of dimensionless curvature `kappa`), `Composed` (via `∘`), plus `rotation` helpers — `rotation(n)` points a structure's `+z` along a normal `n`
 - **Structures**: `Structure` (a shape and its deformation), `Composite` (several structures, each with its own deformation and share of the events)
 - **Events**: `eventtimes` at a constant rate, over either a `t_end` or a fixed count
 - **Background**: `Background` + `FieldOfView` for spurious localizations, with their own photon budget

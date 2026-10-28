@@ -1,8 +1,7 @@
 """
     AbstractStructure{D}
 
-What [`simulate`](@ref) draws signal events from: a single [`Structure`](@ref),
-or a [`Composite`](@ref) of several.
+What [`simulate`](@ref) draws signal events from: a single [`Structure`](@ref), or a [`Composite`](@ref) of several.
 """
 abstract type AbstractStructure{D} end
 
@@ -19,7 +18,7 @@ struct Structure{D,S,M} <: AbstractStructure{D}
 end
 
 function Structure(shape::AbstractShape{D}, motion::AbstractDeformation{D}) where {D}
-    Structure{D,typeof(shape),typeof(motion)}(shape, motion)
+    return Structure{D,typeof(shape),typeof(motion)}(shape, motion)
 end
 
 Structure(shape::AbstractShape{D}) where {D} = Structure(shape, Static{D}())
@@ -34,13 +33,9 @@ World position at time `t` of the material coordinate `u`.
 """
     Composite(structure => weight, ...)
 
-Several structures imaged together. Each signal event comes from component `k`
-with probability `weight[k] / sum(weight)`, so a composite is the same as its
-components simulated at those fractions of `emis_rate` and merged.
+Several structures imaged together. Each signal event comes from component `k` with probability `weight[k] / sum(weight)`, so a composite is the same as its components simulated at those fractions of `emis_rate` and merged.
 
-Every component keeps its own shape and deformation, so parts can move
-independently — a cap that bends beside a ring that does not. Motion shared by
-the whole composite, such as drift, is composed into each component with `∘`.
+Every component keeps its own shape and deformation, so parts can move independently — a cap that bends beside a ring that does not. Motion shared by the whole composite, such as drift, is composed into each component with `∘`.
 
 ```julia
 # a ring with a bending cap 50 nm above it
@@ -51,11 +46,9 @@ scr = Composite(
 )
 ```
 
-Weights are fractions of *events*, not label densities: for an equal density
-across components, make them proportional to each component's length or area.
+Weights are fractions of *events*, not label densities: for an equal density across components, make them proportional to each component's length or area.
 
-In the [`Truth`](@ref), `component` says which component each localization came
-from, and `motion[k]` is component `k`'s deformation.
+In the [`Truth`](@ref), `component` says which component each localization came from, and `motion[k]` is component `k`'s deformation.
 """
 struct Composite{D,C<:Tuple{Vararg{Structure{D}}},K} <: AbstractStructure{D}
     components::C
@@ -86,9 +79,10 @@ end
 @inline _sample_event(rng::AbstractRNG, c::Composite, t::Real) =
     _pick(rng, c.components, c.cumweights, rand(rng), t, Int32(1))
 
-# Walk the components to the one `v` falls in. Recursing on the tail keeps every
-# branch concretely typed, so components of different types stay inferable.
-@inline function _pick(rng::AbstractRNG, comps::Tuple, cw::Tuple, v::Real, t::Real, k::Int32)
+# Walk the components to the one `v` falls in. Recursing on the tail keeps every branch concretely typed, so components of different types stay inferable.
+@inline function _pick(
+    rng::AbstractRNG, comps::Tuple, cw::Tuple, v::Real, t::Real, k::Int32
+)
     if length(comps) == 1 || v < first(cw)
         x, u, _ = _sample_event(rng, first(comps), t)
         return x, u, k
@@ -103,9 +97,7 @@ _motion(c::Composite) = map(x -> x.motion, c.components)
 """
     sample_position([rng], s::AbstractStructure, t) -> SVector
 
-Draw one position from the structure as it stands at time `t`: a material
-coordinate from the reference shape, pushed forward by the deformation. For a
-[`Composite`](@ref), the component is drawn first.
+Draw one position from the structure as it stands at time `t`: a material coordinate from the reference shape, pushed forward by the deformation. For a [`Composite`](@ref), the component is drawn first.
 """
 @inline sample_position(rng::AbstractRNG, s::AbstractStructure, t::Real) =
     first(_sample_event(rng, s, t))
@@ -114,8 +106,7 @@ sample_position(s::AbstractStructure, t::Real) = sample_position(default_rng(), 
 
 # ---------------------------------------------------------------------------
 
-# Stage 2: signal or background, for every event. With no background there is
-# nothing to decide.
+# Stage 2: signal or background, for every event. With no background there is nothing to decide.
 _classify(::AbstractRNG, ::Real, ::Nothing, n::Integer) = fill(true, n)
 
 function _classify(rng::AbstractRNG, λs::Real, bg::Background, n::Integer)
@@ -126,14 +117,14 @@ function _classify(rng::AbstractRNG, λs::Real, bg::Background, n::Integer)
     return issignal
 end
 
-# Stage 3: photon counts. Signal and background each have their own
-# distribution, so the draw depends on the type decided in stage 2. Both are
-# passed as models, not samplers, so the two branches stay symmetric.
-_counts(rng::AbstractRNG, ::Vector{Bool}, optics::Optics, ::Nothing, n::Integer) =
-    rand(rng, Distributions.sampler(photondist(optics)), n)
+# Stage 3: photon counts. Signal and background each have their own distribution, so the draw depends on the type decided in stage 2. Both are passed as models, not samplers, so the two branches stay symmetric.
+function _counts(rng::AbstractRNG, ::Vector{Bool}, optics::Optics, ::Nothing, n::Integer)
+    return rand(rng, Distributions.sampler(photondist(optics)), n)
+end
 
-function _counts(rng::AbstractRNG, issignal::Vector{Bool}, optics::Optics,
-    bg::Background, n::Integer)
+function _counts(
+    rng::AbstractRNG, issignal::Vector{Bool}, optics::Optics, bg::Background, n::Integer
+)
     sig = Distributions.sampler(photondist(optics))
     bgs = Distributions.sampler(photondist(bg))
     out = Vector{Int}(undef, n)
@@ -143,14 +134,19 @@ function _counts(rng::AbstractRNG, issignal::Vector{Bool}, optics::Optics,
     return out
 end
 
-# Noise-free position, material coordinate and component of one event.
-# Dispatching on the background keeps the spurious branch from existing at all
-# when there is none.
-@inline _place_event(rng::AbstractRNG, s::AbstractStructure, ::Nothing, ::Bool,
-    t::Real, ::Type{T}) where {T} = _sample_event(rng, s, t)
+# Noise-free position, material coordinate and component of one event. Dispatching on the background keeps the spurious branch from existing at all when there is none.
+@inline _place_event(
+    rng::AbstractRNG, s::AbstractStructure, ::Nothing, ::Bool, t::Real, ::Type{T}
+) where {T} = _sample_event(rng, s, t)
 
-@inline function _place_event(rng::AbstractRNG, s::AbstractStructure{D}, bg::Background{D},
-    issig::Bool, t::Real, ::Type{T}) where {D,T}
+@inline function _place_event(
+    rng::AbstractRNG,
+    s::AbstractStructure{D},
+    bg::Background{D},
+    issig::Bool,
+    t::Real,
+    ::Type{T},
+) where {D,T}
     issig && return _sample_event(rng, s, t)
     nan = SVector{D,T}(ntuple(_ -> T(NaN), Val(D)))
     return randin(rng, bg.fov), nan, Int32(0)
@@ -159,8 +155,7 @@ end
 """
     simulate([rng], structure; emis_rate, optics, t_end | nevents, background=nothing)
 
-Simulate an SMLM acquisition of a moving structure — a [`Structure`](@ref), or
-a [`Composite`](@ref) of several.
+Simulate an SMLM acquisition of a moving structure — a [`Structure`](@ref), or a [`Composite`](@ref) of several.
 
 The pipeline is four batched stages, in order:
 
@@ -169,11 +164,7 @@ The pipeline is four batched stages, in order:
 3. all photon counts, each from the distribution its type calls for;
 4. events that emitted no photons are dropped, and the survivors are localized.
 
-Stage 4 is not a tunable threshold: an event that yields no detected photons
-produces nothing to fit, so there is no localization to report. `emis_rate`
-therefore counts *emission events*, and a fraction `1/(1+hτ)` of them leave no
-trace. Among the rows that survive the photon count follows the geometric law
-conditioned on `N ≥ 1`, with mean `1 + hτ`.
+Stage 4 is not a tunable threshold: an event that yields no detected photons produces nothing to fit, so there is no localization to report. `emis_rate` therefore counts *emission events*, and a fraction `1/(1+hτ)` of them leave no trace. Among the rows that survive the photon count follows the geometric law conditioned on `N ≥ 1`, with mean `1 + hτ`.
 
 Pass exactly one of:
 
@@ -182,12 +173,9 @@ Pass exactly one of:
 
 `nevents` counts events, not localizations; expect about `n·hτ/(1+hτ)` rows.
 
-Pass a [`Background`](@ref) to add spurious localizations. They come from the
-same superposed Poisson process, are classified in stage 2, draw from their own
-photon distribution in stage 3, and are flagged in `truth.issignal`.
+Pass a [`Background`](@ref) to add spurious localizations. They come from the same superposed Poisson process, are classified in stage 2, draw from their own photon distribution in stage 3, and are flagged in `truth.issignal`.
 
-Localizations carry the exact event time rather than a frame index. Frames are
-recoverable afterwards if you ever want them — `floor.(locs.t ./ period) .+ 1`.
+Localizations carry the exact event time rather than a frame index. Frames are recoverable afterwards if you ever want them — `floor.(locs.t ./ period) .+ 1`.
 
 Returns the localization table and the [`Truth`](@ref) aligned with it.
 
@@ -214,19 +202,23 @@ locs, truth = simulate(sphere;
 nbackground(truth) / length(truth)   # spurious fraction
 ```
 """
-function simulate(rng::AbstractRNG, s::AbstractStructure{D}; emis_rate::Real,
-    optics::Optics{D,T}, t_end::Union{Nothing,Real}=nothing,
+function simulate(
+    rng::AbstractRNG,
+    s::AbstractStructure{D};
+    emis_rate::Real,
+    optics::Optics{D,T},
+    t_end::Union{Nothing,Real}=nothing,
     nevents::Union{Nothing,Integer}=nothing,
-    background::Union{Nothing,Background{D}}=nothing) where {D,T}
-
-    (t_end === nothing) == (nevents === nothing) && throw(ArgumentError(
-        "pass exactly one of `t_end` or `nevents`"))
+    background::Union{Nothing,Background{D}}=nothing,
+) where {D,T}
+    (t_end === nothing) == (nevents === nothing) &&
+        throw(ArgumentError("pass exactly one of `t_end` or `nevents`"))
 
     total = background === nothing ? emis_rate : emis_rate + background.rate
 
     # 1. every event time
-    times = t_end === nothing ? eventtimes(rng, total, nevents) :
-            eventtimes(rng, total, t_end)
+    times =
+        t_end === nothing ? eventtimes(rng, total, nevents) : eventtimes(rng, total, t_end)
     nev = length(times)
 
     # 2. every event type, then 3. every photon count
@@ -276,8 +268,12 @@ simulate(s::AbstractStructure; kwargs...) = simulate(default_rng(), s; kwargs...
 
 Convenience form that builds the [`Structure`](@ref) for you.
 """
-simulate(rng::AbstractRNG, shape::AbstractShape, motion::AbstractDeformation; kwargs...) =
-    simulate(rng, Structure(shape, motion); kwargs...)
+function simulate(
+    rng::AbstractRNG, shape::AbstractShape, motion::AbstractDeformation; kwargs...
+)
+    return simulate(rng, Structure(shape, motion); kwargs...)
+end
 
-simulate(shape::AbstractShape, motion::AbstractDeformation; kwargs...) =
-    simulate(default_rng(), Structure(shape, motion); kwargs...)
+function simulate(shape::AbstractShape, motion::AbstractDeformation; kwargs...)
+    return simulate(default_rng(), Structure(shape, motion); kwargs...)
+end

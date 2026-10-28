@@ -4,7 +4,7 @@ Guidance for AI coding agents working in this repository. Workspace-wide rules (
 
 ## What this is
 
-**SimSMLM.jl** simulates single-molecule localization microscopy (SMLM) datasets from **moving** structures. For example, a sphere whose centre drifts and whose radius grows, or a spherical cap with a drifting center and a changing curvature. It exists to produce test data for the fitting packages LocMoFit and DynMoFit, so it must be **accurate enough to test them**: its output must follow the stated model closely enough that a fit failing on SimSMLM data points to the fitter, not the simulator. It is not production software, and the owner values a small codebase over features: do not add capabilities that were not asked for.
+**SimSMLM.jl** simulates single-molecule localization microscopy (SMLM) datasets from **moving** structures. For example, a sphere whose center drifts and whose radius grows, or a spherical cap with a drifting center and a changing curvature. It exists to produce test data for the fitting packages LocMoFit and DynMoFit, so it must be **accurate enough to test them**: its output must follow the stated model closely enough that a fit failing on SimSMLM data points to the fitter, not the simulator. It is not production software, and the owner values a small codebase over features: do not add capabilities that were not asked for.
 
 ## Commands
 
@@ -29,7 +29,7 @@ CI and `[compat]` target Julia 1.13 only (see Compatibility in `../AGENTS.md`); 
 | `src/optics.jl` | Uncertainty models (`ShotNoise`, `StallingaRieger`, `GaussianMask`), `Optics`, `photondist` |
 | `src/simulate.jl` | `AbstractStructure`, `Structure`, `Composite`, and the `simulate` pipeline |
 | `test/runtests.jl` | Single file, one `@testset` per concern |
-| `derivations/derivation.qmd` | The owner's derivations (gitignored): photon and precision models, the constant-area cap map, Poisson splitting. **Maths only** — no code, no references to the implementation. All math should be checked there first. If new math is added, notes must be created there. |
+| `derivations/derivation.qmd` | The owner's derivations (gitignored): photon and precision models, the constant-area cap map, Poisson splitting. **Math only** — no code, no references to the implementation. All math should be checked there first. If new math is added, notes must be created there. |
 | `README.md` | Quick start only: what SimSMLM is, the main example, short cap/composite and point-cloud examples, the building blocks. Keep it short; details go in `NOTE.md`. |
 | `NOTE.md` | Everything behind the README: the model and its assumptions, background, photon count, caps, composites, storage, and implementation notes (how the derivations map onto the code, numerical guards, design decisions and their measured cost). Discuss implementation here or in source comments, never in `derivations/`. |
 | `papers/` | Reference PDFs (gitignored) |
@@ -43,7 +43,7 @@ Four batched stages, in this order — keep it that way:
 3. **Photons** — each event's count from its type's distribution: `photondist(optics)` or `photondist(background)`, both `Geometric(1/(1+mean))`.
 4. **Filter & localize** — events with **zero** photons are dropped (not a tunable threshold — there is no `min_photons`). Survivors get a fresh position sampled from the structure *at that instant* (`sample_site` → `place`; a `Composite` first draws the component), an uncertainty `σ = uncertainty(model, N)`, and Gaussian noise.
 
-Consequences worth knowing before touching the maths:
+Consequences worth knowing before touching the math:
 
 - `emis_rate` counts *emission events*; a fraction `1/(1+hτ)` leave no localization. `nevents` counts events, not rows.
 - Surviving photon counts are geometric conditioned on `N ≥ 1`, so `mean(locs.nphotons) ≈ 1 + meanphotons(o)`, not `meanphotons(o)`.
@@ -53,7 +53,7 @@ Consequences worth knowing before touching the maths:
 - `Bend` expects material points on the unit sphere and is equal-area, so uniform stays uniform at every `κ`; `|κ| ≤ 1` is a hard limit (`|κ| = 1` is the full sphere).
 - `Composite` weights are fractions of *events* (Poisson thinning), not label densities, and are constant in time.
 
-The physical derivations live in `derivations/derivation.qmd`; if you change the photon or precision model, check it against that file. How the maths is implemented is in `NOTE.md`.
+The physical derivations live in `derivations/derivation.qmd`; if you change the photon or precision model, check it against that file. How the math is implemented is in `NOTE.md`.
 
 ## Data layout (important)
 
@@ -67,8 +67,10 @@ The physical derivations live in `derivations/derivation.qmd`; if you change the
 - **Performance comes before simplicity** (workspace objectives: accuracy, then performance, then simplicity). The hot loop is allocation-free; ~10⁷ events in well under a second — keep it that way, and benchmark before and after touching it. Preallocate when sizes are known; build `Distributions.sampler(...)` once, outside loops.
 - Every sampling function takes `rng::AbstractRNG` first, with a `default_rng()` convenience method.
 - Validate constructor arguments with `ArgumentError`/`DimensionMismatch`. When a struct has `SVector` fields and needs validation, use an **inner** constructor — Julia's auto-generated exact-match constructor otherwise bypasses an outer validating one.
+- Public names are ASCII (SciML style: no Unicode in public APIs): exported names, keywords, and the fields users construct or read, such as `Bend.kappa` and the uncertainty models' `sigma` (renamed from `κ` and `σ` on 2026-10-28). Greek letters stay in local variables, positional arguments and math.
 - `Base.precision` exists, so the uncertainty function is named `uncertainty`; the `Localization` field is still `precision`. Avoid exporting names that clash with `Base`.
 - Docstrings on every exported name, explaining *why*, not just *what*. Match the existing prose style and comment density.
+- Style (root `AGENTS.md`, Style guide): code is formatted with JuliaFormatter in Blue style (`.JuliaFormatter.toml`), `julia -e 'using JuliaFormatter; format(["src", "test"])'`. Comments, docstrings, `README.md` and `NOTE.md` have one line per paragraph, list item or signature, with no hard line breaks; section banners (`# ----`) and code examples keep their lines.
 - Dependencies: Distributions, LinearAlgebra, Random, StaticArrays, StructArrays. Ask before adding more.
 
 ## Testing
@@ -76,12 +78,12 @@ The physical derivations live in `derivations/derivation.qmd`; if you change the
 - Use `StableRNG(seed)` (via the `rng()` helper), never a seeded default RNG — Julia's default stream is not stable across versions.
 - Tests are **statistical**: assert against the closed-form expectation with a tolerance a few standard errors wide (`rtol`/`atol`). Derive the expected value; don't tune thresholds to whatever the current output happens to be.
 - A failing statistical test may be a wrong expectation rather than a bug — work out the theory before changing either.
-- For every public behaviour change, update the tests **and** `NOTE.md` (and the README if the quick-start usage changes), and grep for stale references (renamed keywords, removed types) across `src/`, `test/`, `README.md` and `NOTE.md`.
+- For every public behavior change, update the tests **and** `NOTE.md` (and the README if the quick-start usage changes), and grep for stale references (renamed keywords, removed types) across `src/`, `test/`, `README.md` and `NOTE.md`.
 
 ## Working with the owner
 
 The general rules are in `../AGENTS.md`. Specific to this package:
 
-- Recent history is a steady *removal* of features (frame grids, labelling, blinking kinetics, time-varying rates, `min_photons`) — don't reintroduce them.
+- Recent history is a steady *removal* of features (frame grids, labeling, blinking kinetics, time-varying rates, `min_photons`) — don't reintroduce them.
 - Docstrings can lag behind the code after the owner's edits; when they disagree, the code is usually the intent — ask if unsure, and fix the docstring.
 - Not wanted, by the owner's decision: Poisson photon counts (keep the geometric model), precision independent of the photon count, and deliberately mis-reported precision. Old fitter-side simulators did these as quick hacks; don't port them.
