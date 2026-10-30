@@ -90,6 +90,7 @@ For partial labeling, keep a random subset of the points: `PointCloud(pts[:, ran
 - **Structures**: `Structure` (a shape and its deformation), `Composite` (several structures, each with its own deformation and share of the events)
 - **Events**: `eventtimes` at a constant rate, over either a `t_end` or a fixed count
 - **Background**: `Background` + `FieldOfView` for spurious localizations, with their own photon budget
+- **Blur**: `simulate(...; blur)`, an isotropic Gaussian displacement of each signal emitter from the structure (the label's size; LocMoFit's `sigma`)
 - **Uncertainty**: `ShotNoise` (Cramér–Rao, `s/√n`), `StallingaRieger` and `GaussianMask` (both with background and pixelation)
 - **Export**: `smaptable` — flat columns with SMAPpy's names (`x_nm`, `xy_err_nm`, `photons`, `time_s`, …) that `CSV.write` or `DataFrame` take directly; the truth exports as its own table
 
@@ -97,5 +98,5 @@ Any model field accepts either a constant or a function of time, resolved by `at
 
 ## Further reading
 
-- `NOTE.md` — the model and its assumptions, spherical caps, composite structures, storage, and implementation notes.
-- `derivations/derivation.qmd` — the maths: photon counts, precision models, the constant-area cap map, Poisson splitting.
+- `NOTE.md` — the model and its assumptions, the blur, spherical caps, composite structures, storage, and implementation notes.
+- `derivations/derivation.qmd` — the maths: photon counts, precision models, the blur, the constant-area cap map, Poisson splitting.

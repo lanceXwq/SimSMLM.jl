@@ -9,7 +9,7 @@ Every emission event is independent, and yields at most one localization:
 1. **When** — event times are a Poisson process of constant `emis_rate`, so the waiting time between events is exponential. `eventtimes`. The clock starts at the first event, so `locs.t` begins at exactly zero.
 2. **Where** — a material coordinate is drawn from the reference shape and pushed forward by the deformation to give the position *at that instant*. `sample_site` + `place`. For a `Composite`, the component is drawn first.
 3. **How bright** — the photon count is geometric, from whichever distribution the event's type calls for (see below). `photondist`.
-4. **How well localized** — an `AbstractUncertainty` model turns the photon count into a per-axis standard deviation, and the reported position is the truth plus that noise.
+4. **How well localized** — an `AbstractUncertainty` model turns the photon count into a per-axis standard deviation, and the reported position is the truth plus that noise, and plus the blur for a signal event (see below).
 
 The four stages are batched in that order: all event times, then all event types, then all photon counts, then the events that emitted nothing are dropped and the survivors localized.
 
@@ -26,6 +26,15 @@ Passing a `Background` adds spurious localizations — the false positives a rea
 Because independent Poisson processes superpose, one stream is drawn at `λ_signal + rate` and each event is labelled signal with probability `λ_signal / (λ_signal + rate)`. That is exact and costs one exponential draw per event instead of two processes and a merge.
 
 Background carries its own `meanphotons`, separate from the signal's. Since both share the PSF and uncertainty model, a dimmer background is also a *less precisely localized* one — which is what real false positives look like. Pass `meanphotons(optics)` to make them indistinguishable in brightness.
+
+### Blur
+
+`simulate(...; blur)` displaces each signal event's emitter from its structure point by an isotropic Gaussian of standard deviation `blur` (nm, default 0): the size of the label, and any spread of the same kind that the precision does not account for. It is LocMoFit's fitted `sigma`, and the law is `@eq-blur` in the derivations: each signal localization scatters about its structure point with per-axis variance `precision² + blur²`.
+
+- **What is reported.** The precision column stays the localization's own `σ`, since a real pipeline reports the uncertainty of the position estimate and knows nothing of the label. `truth.position` stays the structure point, so `place(truth.motion, truth.u[i], locs.t[i]) == truth.position[i]` still holds, and `errors(locs, truth)` divided by `sqrt.(precisions(locs) .^ 2 .+ blur^2)` is standard normal on the signal rows. The displaced emitter positions are not stored.
+- **Background** rows are not blurred: they have no structure point to be displaced from.
+- **One draw.** The displacement and the localization error are independent Gaussians, so the code draws once with standard deviation `sqrt(σ² + blur²)` per axis instead of twice, which has exactly the same law. A blur therefore uses no extra random numbers: the same seed gives the same events, photons, precisions and truth with or without it, and with `blur = 0` exactly the data it always gave.
+- **Cost.** One `sqrt` per signal localization. At 10⁷ events the time without a blur did not change measurably (0.37–0.41 s before and after, back to back), and with one it was 0.37–0.50 s, with no new allocations.
 
 ### Photon count
 

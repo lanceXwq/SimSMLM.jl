@@ -553,6 +553,51 @@ rng() = StableRNG(20260905)
         @test_throws DimensionMismatch Composite(ring => 1.0, Structure(Ring{2}()) => 1.0)
     end
 
+    @testset "blur" begin
+        sphere = Structure(SphereSurface{3}(), Similarity{3}(scale=100.0))
+        fov = FieldOfView(SA[-300.0, -300.0, -300.0], SA[300.0, 300.0, 300.0])
+        opt = Optics(uncertainty=ShotNoise{3}(120.0), brightness=1e5, ontime=0.01)
+        kw = (
+            emis_rate=5000.0,
+            t_end=10.0,
+            optics=opt,
+            background=Background(rate=500.0, fov=fov, meanphotons=200.0),
+        )
+        β = 5.0
+        a, ta = simulate(rng(), sphere; kw...)
+        b, tb = @inferred simulate(rng(), sphere; kw..., blur=β)
+
+        # a zero blur is the default, draw for draw
+        @test first(simulate(rng(), sphere; kw..., blur=0)).position == a.position
+
+        # the blur draws nothing of its own, so the same seed gives the same events, photons, precisions and truth; each signal residual is the unblurred one scaled from σ to √(σ² + β²), and background rows are untouched
+        @test tb.position == ta.position && tb.issignal == ta.issignal
+        @test b.t == a.t && b.nphotons == a.nphotons && precisions(b) == precisions(a)
+        σ = precisions(a)
+        sig, bg = tb.issignal, .!tb.issignal
+        @test errors(b, tb)[:, sig] ≈ (sqrt.(σ .^ 2 .+ β ^ 2) ./ σ .* errors(a, ta))[:, sig]
+        @test positions(b)[:, bg] == positions(a)[:, bg]
+
+        # signal residuals over √(precision² + blur²) are standard normal on every axis (@eq-blur)
+        z = errors(b, tb)[:, sig] ./ sqrt.(σ[:, sig] .^ 2 .+ β^2)
+        se = 1 / sqrt(size(z, 2))
+        for d in 1:3
+            @test mean(z[d, :]) ≈ 0.0 atol = 4se
+            @test std(z[d, :]) ≈ 1.0 atol = 4se / sqrt(2)
+        end
+
+        # 2D: the same law in the plane
+        ring = Structure(Ring{2}(), Similarity{2}(scale=50.0))
+        opt2 = Optics(uncertainty=ShotNoise{2}(120.0), brightness=1e5, ontime=0.01)
+        l2, t2 = simulate(rng(), ring; emis_rate=5000.0, t_end=10.0, optics=opt2, blur=β)
+        z2 = errors(l2, t2) ./ sqrt.(precisions(l2) .^ 2 .+ β^2)
+        @test std(vec(z2)) ≈ 1.0 atol = 4 / sqrt(2 * length(z2))
+
+        @test_throws ArgumentError simulate(rng(), sphere; kw..., blur=-1.0)
+        @test_throws ArgumentError simulate(rng(), sphere; kw..., blur=NaN)
+        @test_throws ArgumentError simulate(rng(), sphere; kw..., blur=Inf)
+    end
+
     @testset "nevents and t_end are exclusive" begin
         sphere = Structure(SphereSurface{3}(), Similarity{3}(scale=100.0))
         opt = Optics(uncertainty=ShotNoise{3}(120.0), brightness=1e6, ontime=0.01)

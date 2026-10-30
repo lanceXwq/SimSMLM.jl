@@ -88,7 +88,7 @@ ndim(::LocalizationTable{D}) where {D} = D
 
 Ground truth for a simulated dataset, aligned element-for-element with the localization table it came from, and stored the same way — contiguous matrices viewed as columns of static vectors.
 
-- `position` — the noise-free position each localization was drawn from
+- `position` — the noise-free position each localization was drawn from: the point on the structure, without the emitter's displacement when [`simulate`](@ref) adds a `blur`
 - `u`        — the material coordinate on the reference shape
 - `issignal` — `false` for a spurious localization (see [`Background`](@ref))
 - `component` — which component of a [`Composite`](@ref) produced it: `1` for a plain [`Structure`](@ref), `0` for a spurious localization
@@ -144,7 +144,7 @@ truepositions(tr::Truth) = _matrix(tr.position)
 """
     errors(locs, truth) -> D×N matrix
 
-Per-axis localization error, `position - truth`. Dividing by `precisions(locs)` should give standard normal residuals.
+Per-axis localization error, `position - truth`. Dividing by `precisions(locs)` should give standard normal residuals. With a `blur` in [`simulate`](@ref), the signal residuals also contain the emitter's displacement, so divide them by `sqrt.(precisions(locs) .^ 2 .+ blur^2)` instead.
 """
 function errors(locs::LocalizationTable{D,T}, tr::Truth{D,T}) where {D,T}
     length(locs) == length(tr) || throw(

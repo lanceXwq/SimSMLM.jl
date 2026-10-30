@@ -153,7 +153,7 @@ end
 end
 
 """
-    simulate([rng], structure; emis_rate, optics, t_end | nevents, background=nothing)
+    simulate([rng], structure; emis_rate, optics, t_end | nevents, background=nothing, blur=0)
 
 Simulate an SMLM acquisition of a moving structure — a [`Structure`](@ref), or a [`Composite`](@ref) of several.
 
@@ -162,7 +162,7 @@ The pipeline is four batched stages, in order:
 1. all event times, from a Poisson process of rate `emis_rate`;
 2. all event types — signal or background — from one Bernoulli draw;
 3. all photon counts, each from the distribution its type calls for;
-4. events that emitted no photons are dropped, and the survivors are localized.
+4. events that emitted no photons are dropped, and the survivors are localized, a signal event with the blur added.
 
 Stage 4 is not a tunable threshold: an event that yields no detected photons produces nothing to fit, so there is no localization to report. `emis_rate` therefore counts *emission events*, and a fraction `1/(1+hτ)` of them leave no trace. Among the rows that survive the photon count follows the geometric law conditioned on `N ≥ 1`, with mean `1 + hτ`.
 
@@ -174,6 +174,8 @@ Pass exactly one of:
 `nevents` counts events, not localizations; expect about `n·hτ/(1+hτ)` rows.
 
 Pass a [`Background`](@ref) to add spurious localizations. They come from the same superposed Poisson process, are classified in stage 2, draw from their own photon distribution in stage 3, and are flagged in `truth.issignal`.
+
+`blur` is the standard deviation of an isotropic Gaussian displacement between the structure and each signal event's emitter, the same for every event: the label's size, and any spread of the same kind that the precision does not account for. It is LocMoFit's fitted `sigma`. Each signal localization then scatters about its structure point with per-axis variance `precision² + blur²`, while its reported precision stays the localization's own. The truth keeps the structure point, not the displaced emitter. Background localizations are not blurred.
 
 Localizations carry the exact event time rather than a frame index. Frames are recoverable afterwards if you ever want them — `floor.(locs.t ./ period) .+ 1`.
 
@@ -210,9 +212,13 @@ function simulate(
     t_end::Union{Nothing,Real}=nothing,
     nevents::Union{Nothing,Integer}=nothing,
     background::Union{Nothing,Background{D}}=nothing,
+    blur::Real=0.0,
 ) where {D,T}
     (t_end === nothing) == (nevents === nothing) &&
         throw(ArgumentError("pass exactly one of `t_end` or `nevents`"))
+    isfinite(blur) && blur >= 0 ||
+        throw(ArgumentError("blur must be finite and non-negative, got $blur"))
+    β² = T(blur)^2
 
     total = background === nothing ? emis_rate : emis_rate + background.rate
 
@@ -243,7 +249,9 @@ function simulate(
         N = counts[k]
         x, u, c = _place_event(rng, s, background, issignal[k], t, T)
         σ = uncertainty(optics.uncertainty, N)
-        v = x .+ σ .* randn(rng, SVector{D,T})
+        # The emitter's offset from the structure and the localization error are independent Gaussians, so one draw with their summed variance has the law of both (@eq-blur). Without a blur the draw is the one it always was, so existing seeds reproduce existing data.
+        spread = β² > 0 && issignal[k] ? sqrt.(σ .^ 2 .+ β²) : σ
+        v = x .+ spread .* randn(rng, SVector{D,T})
 
         for d in 1:D
             pos[d, i] = v[d]
